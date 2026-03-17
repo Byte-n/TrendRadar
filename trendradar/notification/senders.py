@@ -167,13 +167,30 @@ def send_to_feishu(
         )
 
         # 飞书 webhook 只显示 content.text，所有信息都整合到 text 中
-        payload = {
-            "msg_type": "interactive",
-            "content": {
-                "text": batch_content,
-            },
-        }
+        # 根据 webhook 类型选择不同的消息格式
+        if "flow/api/trigger-webhook" in webhook_url:
+            # 自建机器人（飞书流程），使用纯文本格式
+            payload = {
+                "msg_type": "text",
+                "content": {
+                    "text": batch_content,
+                },
+            }
+        else:
+            # 群机器人，使用消息卡片格式支持 Markdown 渲染
+            payload = {
+                "msg_type": "interactive",
+                "card": {
+                    "elements": [
+                        {
+                            "tag": "markdown",
+                            "content": batch_content,
+                        }
+                    ]
+                },
+            }
 
+        print(f"{log_prefix} webhook_url [{webhook_url}] payload  [{str(payload)}]")
         try:
             response = requests.post(
                 webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
@@ -1354,9 +1371,9 @@ def send_to_generic_webhook(
                 # 注意：content 可能包含 JSON 特殊字符，需要先转义
                 json_content = json.dumps(batch_content)[1:-1] # 去掉首尾引号
                 json_title = json.dumps(report_type)[1:-1]
-                
+
                 payload_str = payload_template.replace("{content}", json_content).replace("{title}", json_title)
-                
+
                 # 尝试解析为 JSON 对象以验证有效性
                 try:
                     payload = json.loads(payload_str)
@@ -1371,7 +1388,7 @@ def send_to_generic_webhook(
             response = requests.post(
                 webhook_url, headers=headers, json=payload, proxies=proxies, timeout=30
             )
-            
+
             if response.status_code >= 200 and response.status_code < 300:
                 print(f"{log_prefix}第 {i}/{len(batches)} 批次发送成功 [{report_type}]")
                 if i < len(batches):
